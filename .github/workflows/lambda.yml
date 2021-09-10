@@ -28,5 +28,5 @@ jobs:
           memory_size: 128
           timeout: 150
           handler: main
-          role: arn:aws:iam::947662671000:user/github
+          role: arn:aws:iam::947662671000:role/service-role/cube_keywords-role-oi5acbcn
           runtime: golang1.x
