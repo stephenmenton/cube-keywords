@@ -10,9 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: checkout source code
+        uses: actions/checkout@v1
+      - name: Install Go
+        uses: actions/setup-go@v1
       - name: Compile Binary
         run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -a -o main main.go && zip main.zip main
-
       - name: default deploy
         uses: appleboy/lambda-action@master
         with:
