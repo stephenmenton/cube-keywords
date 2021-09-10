@@ -1,16 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/tidwall/gjson"
 )
 
@@ -19,19 +21,10 @@ const (
 	scryfallNamedURL  = "https://api.scryfall.com/cards/named"
 )
 
-// this is a quick and dirty POC utility
-// this is not representative of my coding style or ability
-
-func main() {
-	// parse
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "ERROR: invalid syntax\n")
-		os.Exit(2)
-	}
-	cubeID := os.Args[1]
+func parseCube(cubeID string) (map[string]int, error) {
 	cards, err := getList(cubeID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
+		return map[string]int{}, err
 	}
 
 	freq := make(map[string]int)
@@ -40,8 +33,8 @@ func main() {
 	for _, v := range cards {
 		if v != "" {
 			// get details
-			time.Sleep(100 * time.Millisecond) // don't kill scryfall
-			k, l, _ := getCardDetails(v)       // keywords, layout
+			time.Sleep(20 * time.Millisecond) // don't kill scryfall
+			k, l, _ := getCardDetails(v)      // keywords, layout
 			if l != "normal" {
 				freq[strings.ToLower(l)]++
 			}
@@ -51,15 +44,7 @@ func main() {
 		}
 	}
 
-	// TODO: flexible output formatting, ordering, etc
-	var keys []string
-	for k := range freq {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		fmt.Printf("\"%s\" %d\n", k, freq[k])
-	}
+	return freq, nil
 }
 
 func getList(cubeID string) ([]string, error) {
@@ -108,4 +93,37 @@ func getCardDetails(name string) ([]string, string, error) {
 	}
 	gl := gjson.GetBytes(body, "layout")
 	return keywords, gl.Str, nil
+}
+
+func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	pc, found := request.PathParameters["cube"]
+	if found {
+		// path parameters are typically URL encoded so to get the value
+		cubeID, err := url.QueryUnescape(pc)
+		if err != nil {
+			return events.APIGatewayProxyResponse{}, err
+		}
+
+		freq, err := parseCube(cubeID)
+		if err != nil {
+			return events.APIGatewayProxyResponse{}, err
+		}
+
+		var body string
+		var keys []string
+		for k := range freq {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			body += fmt.Sprintf("\"%s\" %d\n", k, freq[k])
+		}
+		return events.APIGatewayProxyResponse{Body: body, StatusCode: 200, Headers: map[string]string{"Content-Type": "text/html; charset=UTF-8"}}, nil
+	} else {
+		return events.APIGatewayProxyResponse{}, fmt.Errorf("unable to determine cubeID")
+	}
+}
+
+func main() {
+	lambda.Start(Handler)
 }
