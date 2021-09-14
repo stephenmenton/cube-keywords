@@ -33,6 +33,9 @@ jobs:
     name: "Terraform Plan"
     needs: build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "./deployments/terraform/environment/production"
     steps:
       # Checkout the code
       # Marketplace: https://github.com/marketplace/actions/checkout
@@ -70,17 +73,13 @@ jobs:
 
       # Init pulls credentials from the .aws/credentials file by default
       - name: "Run - Terraform Init"
-        run: |
-          cd ${GITHUB_WORKSPACE}/deployments/terraform/environments/production
-          terraform init -input=false
+        run: terraform init -input=false
 
       # The id value is used for reference in the comment step via "steps.plan.outputs.stdout"
       # Note: Color is disabled to prevent messy characters from appearing in the pull request comment
       - name: "Run - Terraform Plan"
         id: plan
-        run: |
-          cd ${GITHUB_WORKSPACE}/deployments/terraform/environments/production
-          terraform plan -input=false -no-color
+        run: terraform plan -input=false -no-color
 
       # Submit a comment with the plan output to the pull request
       - name: "Run - Terraform Comment"
