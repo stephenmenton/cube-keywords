@@ -30,6 +30,7 @@ jobs:
     
   plan:
     needs: build
+    environment: production
     runs-on: ubuntu-latest
     name: Terraform plan
     env:
