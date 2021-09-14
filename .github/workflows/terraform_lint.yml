@@ -1,0 +1,33 @@
+# original from https://github.com/dflook/terraform-github-actions
+
+name: Lint
+
+on:
+  push:
+    branches:
+      - '!master'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: Validate terraform configuration
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: terraform validate
+        uses: dflook/terraform-validate@v1
+        with:
+          path: deployments/terraform/environments/production
+
+  fmt-check:
+    runs-on: ubuntu-latest
+    name: Check formatting of terraform files
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: terraform fmt
+        uses: dflook/terraform-fmt-check@v1
+        with:
+          path: deployments/terraform/environments/production
