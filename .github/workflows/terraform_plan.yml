@@ -1,0 +1,50 @@
+# original from https://github.com/dflook/terraform-github-actions
+
+name: Create terraform plan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build Lambda
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+      - name: Build Lambda
+        run: GOOS=linux GOARCH=amd64 go build -o main main.go
+      - uses: actions/upload-artifact@v2
+        with:
+          name: main
+          path: main
+    
+  plan:
+    needs: build
+    environment: production
+    runs-on: ubuntu-latest
+    name: Terraform plan
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Download Lambda
+        uses: actions/download-artifact@v2
+        with:
+          name: main
+
+      - name: terraform plan
+        uses: dflook/terraform-plan@v1
+        with:
+          path: deployments/terraform/environments/production
