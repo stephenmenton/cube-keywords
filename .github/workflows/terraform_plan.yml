@@ -11,7 +11,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: Create a Terraform plan
+    name: Build Lambda
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -31,7 +31,7 @@ jobs:
   plan:
     needs: build
     runs-on: ubuntu-latest
-    name: Create a Terraform plan
+    name: Terraform plan
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
