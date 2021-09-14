@@ -6,65 +6,47 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/tidwall/gjson"
 )
 
 const (
 	cobraDownloadBase = "https://cubecobra.com/cube/download/plaintext/"
-	scryfallNamedURL  = "https://api.scryfall.com/cards/named"
 )
 
-func parseCube(cubeID string) (map[string]int, error) {
-	cards, err := getList(cubeID)
-	if err != nil {
-		return map[string]int{}, err
-	}
-
-	freq := make(map[string]int)
-
-	// for each card
-	for _, v := range cards {
-		if v != "" {
-			// get details
-			time.Sleep(20 * time.Millisecond) // don't kill scryfall
-			k, l, _ := getCardDetails(v)      // keywords, layout
-			if l != "normal" {
-				freq[strings.ToLower(l)]++
-			}
-			for _, kv := range k {
-				freq[strings.ToLower(kv)]++
-			}
-		}
-	}
-
-	return freq, nil
-}
-
-func getList(cubeID string) ([]string, error) {
+func getCubeList(cubeID string) ([]string, error) {
 	u, _ := url.Parse(cobraDownloadBase)
 	u, _ = u.Parse(cubeID)
-
-	// get the list
 	resp, err := http.Get(u.String())
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("error retrieving cube [%s]", cubeID)
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
+
+	// failure to read
+	if err != nil {
+		return nil, fmt.Errorf("error reading cube [%s]", cubeID)
+	}
+
 	// bad list?
 	badCube, _ := regexp.Match(`<html`, body)
-	if badCube == true {
+	if badCube {
 		return nil, fmt.Errorf("invalid cube [%s]", cubeID)
 	}
-	cards := strings.Split(string(body), "\n")
-	// strip last one, empty
+
+	// tidy the list
+	cards := strings.Split(string(body), "\r\n")
 	if cards[len(cards)-1] == "" {
 		cards = cards[:len(cards)-1]
 	}
@@ -72,53 +54,83 @@ func getList(cubeID string) ([]string, error) {
 	return cards, nil
 }
 
-// returns slice of keywords, layout, err
-func getCardDetails(name string) ([]string, string, error) {
-	u, _ := url.Parse(scryfallNamedURL)
-	uv := url.Values{}
-	uv.Add("exact", name)
-	u.RawQuery = uv.Encode()
+func getOracle(bucket, item string) (string, error) {
+	sess, _ := session.NewSession(&aws.Config{
+		Region: aws.String("us-west-2")},
+	)
 
-	// get the card
-	resp, err := http.Get(u.String())
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("error retrieving card [%s]", name)
+	file, err := os.Create("/tmp/" + item)
+	if err != nil {
+		return "", fmt.Errorf("unable to create oracle file")
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	gk := gjson.GetBytes(body, "keywords")
-	var keywords []string
-	for _, v := range gk.Array() {
-		keywords = append(keywords, v.Str)
+
+	defer file.Close()
+
+	downloader := s3manager.NewDownloader(sess)
+
+	_, err = downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(item),
+		})
+	if err != nil {
+		return "", fmt.Errorf("unable to download oracle")
 	}
-	gl := gjson.GetBytes(body, "layout")
-	return keywords, gl.Str, nil
+	oracleBytes, err := ioutil.ReadFile("/tmp/" + item)
+	if err != nil {
+		return "", fmt.Errorf("unable to read oracle file")
+	}
+
+	return string(oracleBytes), nil
 }
 
 func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	pc, found := request.PathParameters["cube"]
+	cubeID, found := request.PathParameters["cube"]
 	if found {
-		// path parameters are typically URL encoded so to get the value
-		cubeID, err := url.QueryUnescape(pc)
+		// download cube list
+		cards, err := getCubeList(cubeID)
 		if err != nil {
 			return events.APIGatewayProxyResponse{}, err
 		}
 
-		freq, err := parseCube(cubeID)
+		// download oracle
+		oracle, err := getOracle("cube-keywords", "oracle-cards.json")
 		if err != nil {
 			return events.APIGatewayProxyResponse{}, err
 		}
 
-		var body string
+		// find keywords
+		// frequency of keyword/layout
+		freq := make(map[string]int)
+
+		// for each card...
+		for _, v := range cards {
+			// do nothing
+			if v != "" {
+			}
+			// get keywords
+			keywords := gjson.Get(oracle, fmt.Sprintf(`#(name="%s").keywords`, v))
+			if keywords.Exists() {
+				// return events.APIGatewayProxyResponse{Body: fmt.Sprintf("%+v", keywords), StatusCode: 200, Headers: map[string]string{"Content-Type": "text/html; charset=UTF-8"}}, nil
+				keywords.ForEach(func(key, value gjson.Result) bool {
+					freq[strings.ToLower(value.String())]++
+					return true // keep iterating
+				})
+			}
+		}
+
+		var returnBody string
 		var keys []string
 		for k := range freq {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			body += fmt.Sprintf("\"%s\" %d\n", k, freq[k])
+			returnBody += fmt.Sprintf("\"%s\" %d\n", k, freq[k])
 		}
-		return events.APIGatewayProxyResponse{Body: body, StatusCode: 200, Headers: map[string]string{"Content-Type": "text/html; charset=UTF-8"}}, nil
+
+		return events.APIGatewayProxyResponse{Body: returnBody, StatusCode: 200, Headers: map[string]string{"Content-Type": "text/html; charset=UTF-8"}}, nil
+
 	} else {
 		return events.APIGatewayProxyResponse{}, fmt.Errorf("unable to determine cubeID")
 	}
