@@ -4,8 +4,8 @@ name: Lint
 
 on:
   push:
-    branches:
-      - '!master'
+    branches-ignore:
+      - main
 
 jobs:
   validate:
