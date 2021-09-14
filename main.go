@@ -24,67 +24,79 @@ const (
 	cobraDownloadBase = "https://cubecobra.com/cube/download/plaintext/"
 )
 
+func getCubeList(cubeID string) ([]string, error) {
+	u, _ := url.Parse(cobraDownloadBase)
+	u, _ = u.Parse(cubeID)
+	resp, err := http.Get(u.String())
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("error retrieving cube [%s]", cubeID)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+
+	// failure to read
+	if err != nil {
+		return nil, fmt.Errorf("error reading cube [%s]", cubeID)
+	}
+
+	// bad list?
+	badCube, _ := regexp.Match(`<html`, body)
+	if badCube {
+		return nil, fmt.Errorf("invalid cube [%s]", cubeID)
+	}
+
+	// tidy the list
+	cards := strings.Split(string(body), "\r\n")
+	if cards[len(cards)-1] == "" {
+		cards = cards[:len(cards)-1]
+	}
+
+	return cards, nil
+}
+
+func getOracle(bucket, item string) (string, error) {
+	sess, _ := session.NewSession(&aws.Config{
+		Region: aws.String("us-west-2")},
+	)
+
+	file, err := os.Create("/tmp/" + item)
+	if err != nil {
+		return "", fmt.Errorf("unable to create oracle file")
+	}
+
+	defer file.Close()
+
+	downloader := s3manager.NewDownloader(sess)
+
+	_, err = downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(item),
+		})
+	if err != nil {
+		return "", fmt.Errorf("unable to download oracle")
+	}
+	oracleBytes, err := ioutil.ReadFile("/tmp/" + item)
+	if err != nil {
+		return "", fmt.Errorf("unable to read oracle file")
+	}
+
+	return string(oracleBytes), nil
+}
+
 func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	cubeID, found := request.PathParameters["cube"]
 	if found {
 		// download cube list
-		u, _ := url.Parse(cobraDownloadBase)
-		u, _ = u.Parse(cubeID)
-
-		// get the list
-		resp, err := http.Get(u.String())
-		if err != nil || resp.StatusCode != http.StatusOK {
-			return events.APIGatewayProxyResponse{}, fmt.Errorf("error retrieving cube [%s]", cubeID)
-		}
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		// failure to read
+		cards, err := getCubeList(cubeID)
 		if err != nil {
 			return events.APIGatewayProxyResponse{}, err
 		}
-		// bad list?
-		badCube, _ := regexp.Match(`<html`, body)
-		if badCube {
-			return events.APIGatewayProxyResponse{}, fmt.Errorf("invalid cube [%s]", cubeID)
-		}
-		cards := strings.Split(string(body), "\r\n")
-		// strip last one, empty
-		if cards[len(cards)-1] == "" {
-			cards = cards[:len(cards)-1]
-		}
-		// now have cards populated with cube list
 
 		// download oracle
-		bucket := "cube-keywords"
-		item := "oracle-cards.json"
-
-		sess, _ := session.NewSession(&aws.Config{
-			Region: aws.String("us-west-2")},
-		)
-
-		file, err := os.Create("/tmp/" + item)
+		oracle, err := getOracle("cube-keywords", "oracle-cards.json")
 		if err != nil {
 			return events.APIGatewayProxyResponse{}, err
-		}
-
-		defer file.Close()
-
-		downloader := s3manager.NewDownloader(sess)
-
-		_, err = downloader.Download(file,
-			&s3.GetObjectInput{
-				Bucket: aws.String(bucket),
-				Key:    aws.String(item),
-			})
-		if err != nil {
-			return events.APIGatewayProxyResponse{}, err
-		}
-		oracleBytes, err := ioutil.ReadFile("/tmp/" + item)
-		if err != nil {
-			return events.APIGatewayProxyResponse{}, err
-		}
-		oracle := string(oracleBytes)
-		if oracle != "" {
 		}
 
 		// find keywords
