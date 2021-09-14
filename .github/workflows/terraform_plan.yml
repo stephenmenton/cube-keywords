@@ -1,0 +1,64 @@
+# inspiration:
+#   - https://github.com/dflook/terraform-github-actions
+#   - https://github.com/WahlNetwork/github-action-terraform/blob/master/.github/workflows/tf-plan.yml
+
+name: Terraform plan
+
+# Trigger when a pull request is received
+on:
+  push:
+    branches: [ develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build Lambda
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+      - name: Build Lambda
+        run: GOOS=linux GOARCH=amd64 go build -o main main.go
+      - uses: actions/upload-artifact@v2
+        with:
+          name: main
+          path: main
+
+  terraform-plan:
+    name: "Terraform Plan"
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: "us-west-2"
+
+    steps:
+      # Checkout the code
+      # Marketplace: https://github.com/marketplace/actions/checkout
+      - name: "Setup - Checkout"
+        uses: actions/checkout@v2.1.0
+
+      # Static analysis of Terraform templates to spot potential security issues
+      # Marketplace: https://github.com/marketplace/actions/terraform-security-scan
+      - name: "Setup - Security Scan"
+        uses: triat/terraform-security-scan@v1
+        continue-on-error: true
+
+      # An unfortunately necessary hack given Lambda
+      - name: Download Lambda
+        uses: actions/download-artifact@v2
+        with:
+          name: main
+
+      - name: terraform plan
+        uses: dflook/terraform-plan@v1
+        with:
+          path: deployments/terraform/environments/production

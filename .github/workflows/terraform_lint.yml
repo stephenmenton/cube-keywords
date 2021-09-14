@@ -1,11 +1,11 @@
 # original from https://github.com/dflook/terraform-github-actions
 
-name: Lint
+name: Terraform Lint
 
 on:
   push:
-    branches:
-      - '!master'
+    branches-ignore:
+      - main
 
 jobs:
   validate:
