@@ -22,11 +22,3 @@ jobs:
 
     - name: Test All
       run: go test -v ./...
-
-    - name: Build Lambda
-      run: GOOS=linux GOARCH=amd64 go build -o main main.go
-    
-    - uses: actions/upload-artifact@v2
-      with:
-        name: main
-        path: main
