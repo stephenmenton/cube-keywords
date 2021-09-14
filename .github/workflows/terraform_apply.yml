@@ -9,7 +9,6 @@ jobs:
   apply:
     runs-on: ubuntu-latest
     name: Apply approved plan
-    needs: build
     environment: production
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   
