@@ -31,6 +31,7 @@ jobs:
 
   terraform-plan:
     name: "Terraform Plan"
+    needs: build
     runs-on: ubuntu-latest
     steps:
       # Checkout the code
@@ -42,6 +43,7 @@ jobs:
       # Marketplace: https://github.com/marketplace/actions/terraform-security-scan
       - name: "Setup - Security Scan"
         uses: triat/terraform-security-scan@v1
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
