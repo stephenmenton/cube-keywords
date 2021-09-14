@@ -1,19 +1,15 @@
 # overview
 
-For now, **cube_keywords** is a quick & dirty POC to return layout and keyword frequency in your cube.
-I will revise this documentation once it's more useful and available
+AWS Lambda to return keyword frequency for your [Cube Cobra](http://cubecobra.com/) cube list.
 
 # usage
 
-```sh
-go build -o cube_keywords
-./cube_keywords <cubeid>
-```
+Currently only available as a temporary API Gateway. Will migrate to mtgcube.games after I migrate it to AWS.
 
 # TODO
 
-- flexible output
-- quantity by color identity
-- Dockerfile
-- CI
-- web interface
+- flexible output: /text (current), /json, /html (sortable table)
+- automated deployment
+- unit testing
+- integration testing
+- monitoring
