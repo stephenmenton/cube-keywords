@@ -3,28 +3,9 @@ name: Terraform apply
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    name: Build Lambda
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.17
-      - name: Build Lambda
-        run: GOOS=linux GOARCH=amd64 go build -o main main.go
-      - uses: actions/upload-artifact@v2
-        with:
-          name: main
-          path: main
-  
   apply:
     runs-on: ubuntu-latest
     name: Apply approved plan
@@ -47,6 +28,8 @@ jobs:
           workflow: terraform_plan.yml
           workflow_conclusion: success
           branch: develop
+          name: main
+          path: .
 
       - name: terraform apply
         uses: dflook/terraform-apply@v1
