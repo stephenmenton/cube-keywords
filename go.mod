@@ -3,7 +3,8 @@ module stephenmenton/cube_keywords
 go 1.15
 
 require (
-	github.com/aws/aws-lambda-go v1.26.0
-	github.com/aws/aws-sdk-go v1.40.42
-	github.com/tidwall/gjson v1.6.8
+	github.com/aws/aws-lambda-go v1.34.1
+	github.com/aws/aws-sdk-go v1.44.114
+	github.com/tidwall/gjson v1.14.3
+	github.com/tidwall/pretty v1.2.1 // indirect
 )
